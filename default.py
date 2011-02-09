@@ -164,8 +164,10 @@ def dateduration(ad): #Search a tag for aired date and video duration
    #info["Year"] = int(time.strftime("%Y", info["Aired"]))
   duration = re.search("\(([0-9]+:[0-9]{2})\)", ad.contents[1])
   if duration:
-   #info["Duration"] = duration.group(2)
-   info["Duration"] = time.strftime("%M", time.strptime(duration.group(1), "%M:%S"))
+   info["Duration"] = duration.group(1) 
+  else:
+   info["Duration"] = ""
+   #info["Duration"] = time.strftime("%M", time.strptime(duration.group(1), "%M:%S"))
   return info
 
 def imageinfo(image): #Search an image for its HREF
@@ -289,7 +291,7 @@ def INDEX(provider): #Create a list of top level folders as scraped from TV3's w
      cat = "atoz"
     elif info["Title"] == "TV3 Shows":
      cat = "tv3"
-    elif info["Title"] == "C4TV Shows":
+    elif info["Title"] == "FOUR Shows":
      cat = "c4tv"
     else:
      cat = "tv"
@@ -434,7 +436,9 @@ def add_item_atoz(soup, provider, count): #Scrape items from an AtoZ-style HTML 
      info.update(imageinfo(soup.find("img", attrs={"src": re.compile(urls["IMG_RE"]), "title": True})))
      info.update(seasonepisode(soup.contents[4]))
      info["Title"] = itemtitle(info["TVShowTitle"], info["PlotOutline"])
-     info["Plot"] = unescape(soup.find("span", attrs={"class": "lite"}).string.strip())
+     plot = soup.find("span", attrs={"class": "lite"})
+     if plot.string:
+         info["Plot"] = unescape(plot.string.strip())
      info["Count"] = count
      info["FileName"] = "%s?id=%s&info=%s" % (sys.argv[0], "%s,%s,%s,%s" % (href.group(1), href.group(2), href.group(3), href.group(4)), urllib.quote(str(info)))
      addlistitem(info, 0)
@@ -528,14 +532,16 @@ def SHOW_ATOZ(catid, provider): #Show video items from an AtoZ style TV3 webpage
 def RESOLVE(id, info): #Scrape a page for a given OnDemand video and build an RTMP URL from the info in the page, then play the URL
  ids = id.split(",")
  if len(ids) == 4:
-  doc = gethtmlpage("%s/%s/%s/%s/%s/%s/%s/%s/%s" % (base_url(info["Studio"]), ids[0], urls["VIDEO1"], ids[1], urls["VIDEO2"], ids[2], urls["VIDEO3"], ids[3], urls["VIDEO4"]))
+  pageUrl = "%s/%s/%s/%s/%s/%s/%s/%s/%s" % (base_url(info["Studio"]), ids[0], urls["VIDEO1"], ids[1], urls["VIDEO2"], ids[2], urls["VIDEO3"], ids[3], urls["VIDEO4"])
+  doc = gethtmlpage(pageUrl)
  else:
   doc = gethtmlpage("id")
  if doc:
   #videoid = re.search('var video ="/\*transfer\*([0-9]+)\*([0-9A-Z]+)";', doc)
-  videoid = re.search('var video ="/\*(.*?)\*([0-9]+)\*(.*?)";', doc)
+  videoid = re.search('var video ="\*(.*?)\*([0-9]+)\*(.*?)";', doc)
+  auth = re.search('random_num = "([0-9]+)";', doc)
   if videoid:
-   videoplayer = re.search('var fo = new FlashObject\("(http://static.mediaworks.co.nz/(.*?).swf)', doc)
+   videoplayer = re.search('swfobject.embedSWF\("(http://static.mediaworks.co.nz/(.*?).swf)', doc)
    if videoplayer:
     playlist=list()
     #if __addon__.getSetting('advert') == 'true':
@@ -545,8 +551,10 @@ def RESOLVE(id, info): #Scrape a page for a given OnDemand video and build an RT
      quality = "700K"
     rtmpurl = '%s/%s/%s/%s_%s' % (rtmp(info["Studio"]), videoid.group(1), videoid.group(2), urllib.quote(videoid.group(3)), quality)
     sys.stderr.write("RTMP URL: %s" % (rtmpurl))
-    swfverify = ' swfUrl=%s swfVfy=true' % (videoplayer.group(1))
-    sys.stderr.write("Flash Player: %s" % (videoplayer.group(1)))
+    if auth:
+        swfverify = ' swfUrl=%s?rnd=%s pageUrl=%s swfVfy=true' % (videoplayer.group(1), auth.group(1), pageUrl)
+    else:
+        swfverify = ' swfUrl=%s pageUrl=%s swfVfy=true' % (videoplayer.group(1), pageUrl)
     playlist.append(rtmpurl + swfverify)
     if len(playlist) > 1:
      uri = constructStackURL(playlist)
